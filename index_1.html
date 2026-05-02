@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>フードメニュー 収益ダッシュボード</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #ffffff; --bg2: #f5f5f0; --bg3: #efefea;
+  --text: #1a1a18; --text2: #6b6b67; --text3: #9b9b97;
+  --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.2);
+  --radius: 8px; --radius-lg: 12px;
+  --green: #1D9E75; --red: #D85A30; --blue: #378ADD;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1a; --bg2: #252523; --bg3: #2e2e2b;
+    --text: #f0efe8; --text2: #9b9b97; --text3: #6b6b67;
+    --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+  }
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif; background: var(--bg3); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+.app { max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
+header { margin-bottom: 24px; }
+header h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+header p { font-size: 13px; color: var(--text2); }
+.tabs { display: flex; gap: 2px; background: var(--bg2); border-radius: var(--radius-lg); padding: 4px; margin-bottom: 20px; }
+.tab { flex: 1; padding: 8px 12px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--text2); border-radius: var(--radius); transition: all 0.15s; }
+.tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.tab:hover:not(.active) { color: var(--text); background: rgba(0,0,0,0.04); }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+@media (max-width: 600px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+.metric { background: var(--bg2); border-radius: var(--radius); padding: 14px 16px; }
+.metric-label { font-size: 11px; color: var(--text2); margin-bottom: 6px; letter-spacing: 0.02em; }
+.metric-value { font-size: 22px; font-weight: 500; }
+.metric-delta { font-size: 11px; margin-top: 3px; color: var(--text2); }
+.pos { color: #1D9E75; } .neg { color: #D85A30; }
+.panel { display: none; }
+.panel.active { display: block; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+.card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 16px; }
+.section-label { font-size: 11px; font-weight: 500; color: var(--text2); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 12px; }
+.chart-wrap { position: relative; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--text2); margin-bottom: 10px; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+/* editor */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.toolbar label { font-size: 12px; color: var(--text2); }
+.toolbar input, .toolbar select { padding: 5px 8px; font-size: 12px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+.toolbar button { padding: 5px 12px; font-size: 12px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: none; color: var(--text); cursor: pointer; }
+.toolbar button:hover { background: var(--bg2); }
+.cat-filter { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; }
+.cat-btn { font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 0.5px solid var(--border); background: none; color: var(--text2); cursor: pointer; }
+.cat-btn.active { background: var(--bg2); color: var(--text); border-color: var(--border2); }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; font-weight: 500; color: var(--text2); padding: 6px 8px; border-bottom: 0.5px solid var(--border); white-space: nowrap; }
+td { padding: 8px 8px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+.price-input, .qty-input { padding: 4px 6px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); text-align: right; }
+.price-input { width: 80px; } .qty-input { width: 60px; }
+.cat-badge { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
+.b-meat   { background:#FAECE7; color:#993C1D; }
+.b-pizza  { background:#FAEEDA; color:#854F0B; }
+.b-salad  { background:#EAF3DE; color:#3B6D11; }
+.b-tapas  { background:#E6F1FB; color:#185FA5; }
+.b-dolce  { background:#FBEAF0; color:#993556; }
+.b-ajillo { background:#EEEDFE; color:#534AB7; }
+.empty-row td { text-align: center; color: var(--text2); padding: 20px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>フードメニュー 収益ダッシュボード</h1>
+    <p>価格変更のインパクトをリアルタイムでシミュレーション</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('overview')">概要</button>
+    <button class="tab" onclick="switchTab('editor')">価格編集</button>
+    <button class="tab" onclick="switchTab('simulation')">シミュレーション</button>
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">現在の売上（推定日次）</div><div class="metric-value" id="m-current">¥0</div></div>
+    <div class="metric"><div class="metric-label">変更後の売上</div><div class="metric-value" id="m-new">¥0</div></div>
+    <div class="metric"><div class="metric-label">売上変化額</div><div class="metric-value" id="m-delta">¥0</div><div class="metric-delta" id="m-delta-pct"></div></div>
+    <div class="metric"><div class="metric-label">変更済みアイテム数</div><div class="metric-value" id="m-changed">0</div></div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div id="panel-overview" class="panel active">
+    <div class="two-col">
+      <div class="card">
+        <div class="section-label">カテゴリ別売上構成</div>
+        <div class="legend" id="cat-legend"></div>
+        <div class="chart-wrap" style="height:200px"><canvas id="catChart" role="img" aria-label="カテゴリ別売上構成">カテゴリ別売上</canvas></div>
+      </div>
+      <div class="card">
+        <div class="section-label">価格帯分布</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="priceChart" role="img" aria-label="価格帯分布">価格帯分布</canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-label">売上ランキング上位10品（推定日次）</div>
+      <div class="chart-wrap" style="height:340px"><canvas id="rankChart" role="img" aria-label="売上ランキング">売上ランキング</canvas></div>
+    </div>
+  </div>
+
+  <!-- EDITOR -->
+  <div id="panel-editor" class="panel">
+    <div class="card">
+      <div class="toolbar">
+        <label>一括変更:</label>
+        <select id="bulk-cat">
+          <option value="all">全カテゴリ</option>
+          <option value="Meat Dish">Meat Dish</option>
+          <option value="Pizza">Pizza</option>
+          <option value="Salad">Salad</option>
+          <option value="Tapas">Tapas</option>
+          <option value="Dolce">Dolce</option>
+          <option value="Ajillo">Ajillo</option>
+        </select>
+        <input type="number" id="bulk-pct" value="10" min="-50" max="200" step="1" style="width:60px" />
+        <label>% 変更</label>
+        <button onclick="applyBulk()">適用</button>
+        <button onclick="resetAll()">リセット</button>
+      </div>
+      <div class="cat-filter" id="cat-filter-btns"></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:36%">メニュー名</th>
+              <th style="width:12%">カテゴリ</th>
+              <th style="width:10%;text-align:right">現在価格</th>
+              <th style="width:13%;text-align:right">新価格 (¥)</th>
+              <th style="width:10%;text-align:right">変化率</th>
+              <th style="width:10%;text-align:right">注文数/日</th>
+            </tr>
+          </thead>
+          <tbody id="menu-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIMULATION -->
+  <div id="panel-simulation" class="panel">
+    <div class="two-col">
+      <div class="card">
+        <div class="section-label">現在 vs 変更後</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="simBar" role="img" aria-label="売上比較">売上比較</canvas></div>
+      </div>
+      <div class="card">
+        <div class="section-label">カテゴリ別インパクト</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="simCat" role="img" aria-label="カテゴリ別インパクト">カテゴリ別インパクト</canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-label">月次収益シミュレーション（30日）</div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#378ADD"></span>現在の月次売上</span>
+        <span><span class="legend-dot" style="background:#1D9E75"></span>変更後の月次売上</span>
+      </div>
+      <div class="chart-wrap" style="height:260px"><canvas id="simMonthly" role="img" aria-label="月次シミュレーション">月次シミュレーション</canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-label">変更アイテム詳細</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:36%">メニュー名</th>
+              <th style="width:12%">カテゴリ</th>
+              <th style="width:12%;text-align:right">現在価格</th>
+              <th style="width:12%;text-align:right">新価格</th>
+              <th style="width:12%;text-align:right">変化率</th>
+              <th style="width:16%;text-align:right">日次売上差</th>
+            </tr>
+          </thead>
+          <tbody id="sim-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CAT = {
+  'Meat Dish': { chart:'#D85A30', cls:'b-meat' },
+  'Pizza':     { chart:'#BA7517', cls:'b-pizza' },
+  'Salad':     { chart:'#639922', cls:'b-salad' },
+  'Tapas':     { chart:'#378ADD', cls:'b-tapas' },
+  'Dolce':     { chart:'#D4537E', cls:'b-dolce' },
+  'Ajillo':    { chart:'#7F77DD', cls:'b-ajillo' },
+};
+const BASE = [
+  {name:'ニクモリ',cat:'Meat Dish',price:3290,qty:8},
+  {name:'ビステッカ【牛サーロイン】',cat:'Meat Dish',price:2400,qty:6},
+  {name:'ビステッカ【牛ハラミ】',cat:'Meat Dish',price:1980,qty:9},
+  {name:'ハーブチキングリル',cat:'Meat Dish',price:980,qty:15},
+  {name:'ソーセージグリル盛り合わせ',cat:'Meat Dish',price:900,qty:12},
+  {name:'マルゲリータ',cat:'Pizza',price:850,qty:18},
+  {name:'クアトロフォルマッジ',cat:'Pizza',price:980,qty:14},
+  {name:'シュリンプ×シュリンプ',cat:'Pizza',price:980,qty:12},
+  {name:'ジェノベーゼ',cat:'Pizza',price:980,qty:10},
+  {name:'EUROのシーザーサラダ',cat:'Salad',price:680,qty:20},
+  {name:'生ハムと蒸し野菜の温サラダ',cat:'Salad',price:780,qty:14},
+  {name:'サーモン＆クリームチーズ',cat:'Tapas',price:650,qty:16},
+  {name:'牛肉のカルパッチョ',cat:'Tapas',price:780,qty:11},
+  {name:'アンチョビポテト',cat:'Tapas',price:550,qty:22},
+  {name:'ブロッコリーのマヨチーズ焼き',cat:'Tapas',price:550,qty:18},
+  {name:'自家製ベーコンのポテトサラダ',cat:'Tapas',price:600,qty:15},
+  {name:'牛バラ肉の塩煮込み',cat:'Tapas',price:650,qty:12},
+  {name:'コロコロカプレーゼ',cat:'Tapas',price:600,qty:14},
+  {name:'角煮の天ぷら',cat:'Tapas',price:650,qty:13},
+  {name:'生ハム ハモンセラーノ',cat:'Tapas',price:800,qty:10},
+  {name:'鶏レバーのムース',cat:'Tapas',price:650,qty:9},
+  {name:'チーズの盛り合わせ',cat:'Tapas',price:1000,qty:8},
+  {name:'ピクルス',cat:'Tapas',price:400,qty:25},
+  {name:'オリーブ',cat:'Tapas',price:400,qty:20},
+  {name:'酒盗チーズ',cat:'Tapas',price:550,qty:12},
+  {name:'がっこチーズ',cat:'Tapas',price:500,qty:14},
+  {name:'蔵王のクリームチーズ',cat:'Dolce',price:600,qty:10},
+  {name:'秘密のショコラ',cat:'Dolce',price:600,qty:8},
+  {name:'季節のアイス',cat:'Dolce',price:500,qty:12},
+  {name:'本日のアヒージョ',cat:'Ajillo',price:850,qty:16},
+];
+let menu = BASE.map(m=>({...m,newPrice:m.price}));
+let activeFilter = 'all';
+let charts = {};
+const fmt = n => '¥'+Math.round(n).toLocaleString();
+
+function calcTotals(){
+  let cur=0,nw=0,changed=0;
+  menu.forEach(m=>{cur+=m.price*m.qty;nw+=m.newPrice*m.qty;if(m.newPrice!==m.price)changed++;});
+  return {cur,nw,changed};
+}
+function updateMetrics(){
+  const {cur,nw,changed}=calcTotals();
+  const delta=nw-cur;
+  document.getElementById('m-current').textContent=fmt(cur);
+  document.getElementById('m-new').textContent=fmt(nw);
+  const de=document.getElementById('m-delta');
+  de.textContent=(delta>=0?'+':'')+fmt(delta);
+  de.className='metric-value '+(delta>0?'pos':delta<0?'neg':'');
+  const pct=cur>0?((nw-cur)/cur*100).toFixed(1):0;
+  const pe=document.getElementById('m-delta-pct');
+  pe.textContent=(pct>0?'+':'')+pct+'% vs 現在';
+  pe.className='metric-delta '+(pct>0?'pos':pct<0?'neg':'');
+  document.getElementById('m-changed').textContent=changed;
+}
+function getCatTotals(useNew){
+  const t={};Object.keys(CAT).forEach(c=>t[c]=0);
+  menu.forEach(m=>t[m.cat]+=(useNew?m.newPrice:m.price)*m.qty);
+  return t;
+}
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+function buildOverview(){
+  const cats=Object.keys(CAT),totals=getCatTotals(false),vals=cats.map(c=>totals[c]),colors=cats.map(c=>CAT[c].chart);
+  const total=vals.reduce((a,b)=>a+b,0);
+  document.getElementById('cat-legend').innerHTML=cats.map((c,i)=>`<span><span class="legend-dot" style="background:${colors[i]}"></span>${c} ${Math.round(vals[i]/total*100)}%</span>`).join('');
+  destroyChart('catChart');
+  charts.catChart=new Chart(document.getElementById('catChart'),{type:'doughnut',data:{labels:cats,datasets:[{data:vals,backgroundColor:colors,borderWidth:2,borderColor:'rgba(0,0,0,0)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+ctx.label+': '+fmt(ctx.raw)}}}}});
+  const buckets=['〜600','601-800','801-1000','1001-2000','2001+'],counts=[0,0,0,0,0];
+  menu.forEach(m=>{if(m.price<=600)counts[0]++;else if(m.price<=800)counts[1]++;else if(m.price<=1000)counts[2]++;else if(m.price<=2000)counts[3]++;else counts[4]++;});
+  destroyChart('priceChart');
+  charts.priceChart=new Chart(document.getElementById('priceChart'),{type:'bar',data:{labels:buckets,datasets:[{label:'アイテム数',data:counts,backgroundColor:'#B5D4F4',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{stepSize:1},grid:{color:'rgba(128,128,128,0.1)'}},x:{grid:{display:false}}}}});
+  const sorted=[...menu].sort((a,b)=>(b.price*b.qty)-(a.price*a.qty)).slice(0,10);
+  destroyChart('rankChart');
+  charts.rankChart=new Chart(document.getElementById('rankChart'),{type:'bar',data:{labels:sorted.map(m=>m.name.length>12?m.name.slice(0,12)+'…':m.name),datasets:[{label:'日次売上',data:sorted.map(m=>m.price*m.qty),backgroundColor:sorted.map(m=>CAT[m.cat].chart),borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'rgba(128,128,128,0.1)'},ticks:{callback:v=>'¥'+(v/1000).toFixed(0)+'k'}},y:{grid:{display:false},ticks:{font:{size:11}}}}}});
+}
+function buildEditor(){
+  const rows=activeFilter==='all'?menu:menu.filter(m=>m.cat===activeFilter);
+  document.getElementById('menu-tbody').innerHTML=rows.map(m=>{
+    const ri=menu.indexOf(m);
+    const pct=m.price>0?((m.newPrice-m.price)/m.price*100).toFixed(1):0;
+    const col=m.newPrice>m.price?'#1D9E75':m.newPrice<m.price?'#D85A30':'var(--text2)';
+    return`<tr>
+      <td>${m.name}</td>
+      <td><span class="cat-badge ${CAT[m.cat].cls}">${m.cat}</span></td>
+      <td style="text-align:right;color:var(--text2)">${fmt(m.price)}</td>
+      <td style="text-align:right"><input type="number" class="price-input" value="${m.newPrice}" min="0" step="10" onchange="updatePrice(${ri},this.value)"/></td>
+      <td style="text-align:right;color:${col};font-weight:500">${m.newPrice!==m.price?(pct>0?'+':'')+pct+'%':'—'}</td>
+      <td style="text-align:right"><input type="number" class="qty-input" value="${m.qty}" min="0" max="999" onchange="updateQty(${ri},this.value)"/></td>
+    </tr>`;
+  }).join('');
+}
+function buildCatBtns(){
+  const cats=['all',...Object.keys(CAT)];
+  document.getElementById('cat-filter-btns').innerHTML=cats.map(c=>`<button class="cat-btn ${c===activeFilter?'active':''}" onclick="setFilter('${c}')">${c==='all'?'全て':c}</button>`).join('');
+}
+function setFilter(cat){activeFilter=cat;buildCatBtns();buildEditor();}
+function updatePrice(idx,val){menu[idx].newPrice=Math.max(0,Math.round(Number(val)));updateMetrics();}
+function updateQty(idx,val){menu[idx].qty=Math.max(0,Math.round(Number(val)));updateMetrics();}
+function applyBulk(){
+  const cat=document.getElementById('bulk-cat').value;
+  const pct=Number(document.getElementById('bulk-pct').value)/100;
+  menu.forEach((m,i)=>{if(cat==='all'||m.cat===cat)menu[i].newPrice=Math.max(0,Math.round(m.price*(1+pct)));});
+  buildEditor();updateMetrics();
+}
+function resetAll(){menu.forEach((m,i)=>{menu[i].newPrice=m.price;});buildEditor();updateMetrics();}
+function buildSim(){
+  const cats=Object.keys(CAT),cur0=getCatTotals(false),nw0=getCatTotals(true),{cur,nw}=calcTotals();
+  destroyChart('simBar');
+  charts.simBar=new Chart(document.getElementById('simBar'),{type:'bar',data:{labels:['現在の売上','変更後の売上'],datasets:[{data:[cur,nw],backgroundColor:['#378ADD','#1D9E75'],borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{y:{grid:{color:'rgba(128,128,128,0.1)'},ticks:{callback:v=>'¥'+(v/1000).toFixed(0)+'k'}},x:{grid:{display:false}}}}});
+  const deltas=cats.map(c=>nw0[c]-cur0[c]);
+  destroyChart('simCat');
+  charts.simCat=new Chart(document.getElementById('simCat'),{type:'bar',data:{labels:cats,datasets:[{label:'売上変化',data:deltas,backgroundColor:deltas.map(d=>d>=0?'#9FE1CB':'#F5C4B3'),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+(ctx.raw>=0?'+':'')+fmt(ctx.raw)}}},scales:{y:{grid:{color:'rgba(128,128,128,0.1)'},ticks:{callback:v=>(v>=0?'+':'')+'¥'+Math.abs(v/1000).toFixed(0)+'k'}},x:{grid:{display:false},ticks:{font:{size:10}}}}}});
+  const days=Array.from({length:30},(_,i)=>i+1);
+  destroyChart('simMonthly');
+  charts.simMonthly=new Chart(document.getElementById('simMonthly'),{type:'line',data:{labels:days,datasets:[{label:'現在',data:days.map(d=>cur*d),borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,0.08)',tension:0.3,pointRadius:0,fill:true,borderDash:[5,3]},{label:'変更後',data:days.map(d=>nw*d),borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',tension:0.3,pointRadius:0,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}},scales:{y:{grid:{color:'rgba(128,128,128,0.1)'},ticks:{callback:v=>'¥'+(v/10000).toFixed(0)+'万'}},x:{grid:{display:false},ticks:{callback:(_,i)=>(i+1)%5===0||i===0?(i+1)+'日':'',autoSkip:false}}}}});
+  const changed=menu.filter(m=>m.newPrice!==m.price);
+  document.getElementById('sim-tbody').innerHTML=changed.length===0
+    ?'<tr class="empty-row"><td colspan="6">価格変更なし — 「価格編集」タブで変更してください</td></tr>'
+    :changed.sort((a,b)=>Math.abs((b.newPrice-b.price)*b.qty)-Math.abs((a.newPrice-a.price)*a.qty)).map(m=>{
+      const diff=(m.newPrice-m.price)*m.qty;
+      const pct=((m.newPrice-m.price)/m.price*100).toFixed(1);
+      const col=diff>=0?'#1D9E75':'#D85A30';
+      return`<tr><td>${m.name}</td><td><span class="cat-badge ${CAT[m.cat].cls}">${m.cat}</span></td><td style="text-align:right">${fmt(m.price)}</td><td style="text-align:right">${fmt(m.newPrice)}</td><td style="text-align:right;color:${col};font-weight:500">${(pct>0?'+':'')+pct}%</td><td style="text-align:right;color:${col};font-weight:500">${diff>=0?'+':''}${fmt(diff)}</td></tr>`;
+    }).join('');
+}
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelector(`.tab[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById('panel-'+tab).classList.add('active');
+  if(tab==='overview')buildOverview();
+  if(tab==='editor'){buildCatBtns();buildEditor();}
+  if(tab==='simulation')buildSim();
+}
+updateMetrics();
+buildOverview();
+</script>
+</body>
+</html>
